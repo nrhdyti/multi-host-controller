@@ -1,5 +1,7 @@
 # Multi-Host Controller
 
+![CI](https://github.com/nrhdyti/multi-host-controller/actions/workflows/ci.yml/badge.svg)
+
 A master/agent system in .NET 8 that registers hosts, monitors their health and deploys applications (MinIO included) with Ansible playbooks.
 
 * **Master** (`src/MultiHost.Master`): ASP.NET Core Web API + SignalR + web dashboard, EF Core / PostgreSQL.
