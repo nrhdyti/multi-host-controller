@@ -1,0 +1,154 @@
+---
+# Installs a standalone S3 (MinIO-compatible) server. Runs locally on the agent host (ansible-playbook -c local).
+# Requires root. Uses systemd when present, otherwise starts a background process (Docker/test mode).
+# NOTE: all variables arrive as strings from the master, so cast with | int / | bool where needed.
+- name: Install standalone MinIO
+  hosts: all
+  gather_facts: true
+  vars:
+    arch_map:
+      x86_64: amd64
+      aarch64: arm64
+    # MinIO stopped publishing binaries (dl.min.io now returns 410 Gone). We install Silo, a community
+    # fork of MinIO that is API/CLI/env-var compatible (MINIO_* variables, /minio/health/* endpoints).
+    minio_bin: /usr/local/bin/silo
+    minio_user: minio-user
+    silo_version: "20260806000000.0.0"
+    silo_sha256:
+      amd64: d63d57cc7f0535e1aa116f9e5f42117dbfc4f63492da692b64d3ba6ded30e574
+      arm64: 4389413672d8b2681130a2e518ae6609406671e0f0a5d34934c20701078ee1ad
+    silo_archive: "silo_{{ silo_version }}_linux_{{ arch_map[ansible_facts['architecture']] }}.tar.gz"
+  tasks:
+    - name: Check supported CPU architecture
+      ansible.builtin.assert:
+        that: ansible_facts['architecture'] in arch_map
+        fail_msg: "Unsupported architecture {{ ansible_facts['architecture'] }}"
+
+    - name: Detect systemd
+      ansible.builtin.stat:
+        path: /run/systemd/system
+      register: systemd_probe
+
+    - name: Decide run mode
+      ansible.builtin.set_fact:
+        use_systemd: "{{ minio_run_mode == 'systemd' or (minio_run_mode == 'auto' and systemd_probe.stat.exists) }}"
+
+    - name: Create service group
+      ansible.builtin.group:
+        name: "{{ minio_user }}"
+        system: true
+
+    - name: Create service user
+      ansible.builtin.user:
+        name: "{{ minio_user }}"
+        group: "{{ minio_user }}"
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create data directory
+      ansible.builtin.file:
+        path: "{{ minio_data_dir }}"
+        state: directory
+        owner: "{{ minio_user }}"
+        group: "{{ minio_user }}"
+        mode: "0750"
+
+    - name: Download Silo (MinIO-compatible server) archive
+      ansible.builtin.get_url:
+        url: "{{ minio_download_base }}/{{ silo_archive }}"
+        dest: "/tmp/{{ silo_archive }}"
+        checksum: "sha256:{{ silo_sha256[arch_map[ansible_facts['architecture']]] }}"
+        mode: "0644"
+        timeout: 180
+
+    - name: Extract server binary
+      ansible.builtin.unarchive:
+        src: "/tmp/{{ silo_archive }}"
+        dest: /usr/local/bin
+        include: [silo]
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Remove downloaded archive
+      ansible.builtin.file:
+        path: "/tmp/{{ silo_archive }}"
+        state: absent
+
+    # ---------------- systemd mode ----------------
+    - name: Write environment file
+      ansible.builtin.copy:
+        dest: /etc/default/minio
+        owner: root
+        group: "{{ minio_user }}"
+        mode: "0640"
+        content: |
+          MINIO_ROOT_USER="{{ minio_root_user }}"
+          MINIO_ROOT_PASSWORD="{{ minio_root_password }}"
+          MINIO_VOLUMES="{{ minio_data_dir }}"
+          MINIO_OPTS="--address :{{ minio_api_port }} --console-address :{{ minio_console_port }}"
+      no_log: true
+      when: use_systemd | bool
+
+    - name: Install systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/minio.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=MinIO object storage
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          User={{ minio_user }}
+          Group={{ minio_user }}
+          EnvironmentFile=/etc/default/minio
+          ExecStart={{ minio_bin }} server $MINIO_OPTS $MINIO_VOLUMES
+          Restart=always
+          LimitNOFILE=65536
+
+          [Install]
+          WantedBy=multi-user.target
+      when: use_systemd | bool
+
+    - name: Enable and start MinIO (systemd)
+      ansible.builtin.systemd:
+        name: minio
+        state: restarted
+        enabled: true
+        daemon_reload: true
+      when: use_systemd | bool
+
+    # ---------------- process mode (containers) ----------------
+    - name: Check whether MinIO is already running
+      ansible.builtin.command: pgrep -x silo
+      register: minio_running
+      changed_when: false
+      failed_when: false
+      when: not (use_systemd | bool)
+
+    - name: Start MinIO as a background process
+      ansible.builtin.shell: >
+        setsid -f runuser -u {{ minio_user }} --
+        {{ minio_bin }} server --address :{{ minio_api_port }} --console-address :{{ minio_console_port }}
+        {{ minio_data_dir }} >> /var/log/minio.log 2>&1
+      args:
+        executable: /bin/bash
+      environment:
+        MINIO_ROOT_USER: "{{ minio_root_user }}"
+        MINIO_ROOT_PASSWORD: "{{ minio_root_password }}"
+      no_log: true
+      when:
+        - not (use_systemd | bool)
+        - minio_running.rc != 0
+
+    - name: Wait for the API port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ minio_api_port | int }}"
+        timeout: 60

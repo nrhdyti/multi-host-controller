@@ -1,0 +1,10 @@
+---
+# Runs on the agent host via: ansible-playbook -i localhost, -c local install.yml -e @vars.json
+# All variables are strings; use | int / | bool. Use no_log: true on tasks that touch secrets.
+- name: Install my-app
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Example task
+      ansible.builtin.debug:
+        msg: "Installing on port {{ my_app_port }}"

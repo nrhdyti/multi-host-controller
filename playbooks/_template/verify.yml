@@ -1,0 +1,8 @@
+---
+- name: Verify my-app
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Example check
+      ansible.builtin.debug:
+        msg: "Replace with an ansible.builtin.uri / wait_for health check"

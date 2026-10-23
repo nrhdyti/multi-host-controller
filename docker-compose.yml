@@ -1,0 +1,68 @@
+# Local simulation: 1 master + PostgreSQL + 3 agents (no systemd -> MinIO runs in "process" mode).
+# Agents download the Silo release (MinIO-compatible fork) from github.com, so they need outbound internet access.
+# Demo defaults below are NOT secure; override them with a .env file (see .env.example).
+name: multihost
+
+x-agent: &agent
+  build: { context: ., dockerfile: docker/agent.Dockerfile }
+  depends_on: [master]
+  restart: on-failure
+  environment: &agent-env
+    Agent__MasterUrl: http://master:8080
+    Agent__AllowInsecureHttp: "true"          # plain HTTP only because this is a private compose network
+    Agent__EnrollmentToken: ${ENROLLMENT_TOKEN:-demo-enrollment-token-change-me}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: multihost
+      POSTGRES_USER: multihost
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-multihost-demo}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U multihost -d multihost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  master:
+    build: { context: ., dockerfile: docker/master.Dockerfile }
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      ConnectionStrings__Default: Host=postgres;Database=multihost;Username=multihost;Password=${POSTGRES_PASSWORD:-multihost-demo}
+      Security__JwtKey: ${JWT_KEY:-compose-demo-jwt-key-change-me-0123456789abcdef}
+      Security__BootstrapEnrollmentToken: ${ENROLLMENT_TOKEN:-demo-enrollment-token-change-me}
+      Admin__Username: admin
+      Admin__Password: ${ADMIN_PASSWORD:-admin-change-me}
+      Swagger__Enabled: "true"
+    volumes: ["./playbooks:/playbooks:ro"]   # edit playbooks, then: docker compose restart master
+    ports: ["8080:8080"]
+
+  agent-1:
+    <<: *agent
+    hostname: agent-1
+    environment: *agent-env
+    volumes: [agent1:/var/lib/multihost-agent]
+    ports: ["9100:9000", "9101:9001"]   # MinIO API / console when deployed here
+
+  agent-2:
+    <<: *agent
+    hostname: agent-2
+    environment: *agent-env
+    volumes: [agent2:/var/lib/multihost-agent]
+    ports: ["9200:9000", "9201:9001"]
+
+  agent-3:
+    <<: *agent
+    hostname: agent-3
+    environment: *agent-env
+    volumes: [agent3:/var/lib/multihost-agent]
+    ports: ["9300:9000", "9301:9001"]
+
+volumes:
+  pgdata:
+  agent1:
+  agent2:
+  agent3:

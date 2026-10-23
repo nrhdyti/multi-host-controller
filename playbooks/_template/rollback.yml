@@ -1,0 +1,9 @@
+---
+# Must be safe to run after a partial install.
+- name: Roll back my-app
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Example cleanup
+      ansible.builtin.debug:
+        msg: "Undo everything install.yml did"

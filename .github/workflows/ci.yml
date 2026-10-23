@@ -1,0 +1,30 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet restore
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet test --no-build -c Release --logger "trx"
+
+  playbook-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install ansible-core ansible-lint
+      - run: ansible-playbook --syntax-check -i localhost, playbooks/minio/install.yml playbooks/minio/verify.yml playbooks/minio/rollback.yml -e '{"minio_run_mode":"auto"}'
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f docker/master.Dockerfile -t multihost-master .
+      - run: docker build -f docker/agent.Dockerfile -t multihost-agent .

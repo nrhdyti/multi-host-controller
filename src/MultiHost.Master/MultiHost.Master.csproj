@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>MultiHost.Master</AssemblyName>
+    <RootNamespace>MultiHost.Master</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="YamlDotNet" Version="16.1.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MultiHost.Shared\MultiHost.Shared.csproj" />
+  </ItemGroup>
+</Project>

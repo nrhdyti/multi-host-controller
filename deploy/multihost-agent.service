@@ -1,0 +1,21 @@
+[Unit]
+Description=Multi-Host Controller agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# Publish first: dotnet publish src/MultiHost.Agent -c Release -r linux-x64 --self-contained -o /opt/multihost-agent
+ExecStart=/opt/multihost-agent/MultiHost.Agent
+WorkingDirectory=/opt/multihost-agent
+# Root is required because playbooks install packages and manage services.
+User=root
+Environment=Agent__MasterUrl=https://master.example.com
+Environment=Agent__EnrollmentToken=PASTE-ONE-TIME-TOKEN-HERE
+Environment=Agent__StateFile=/var/lib/multihost-agent/state.json
+Environment=Agent__LogDirectory=/var/log/multihost-agent
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

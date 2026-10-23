@@ -1,0 +1,38 @@
+---
+# Post-install verification. A failure here triggers the rollback playbook.
+- name: Verify MinIO installation
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Liveness probe
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ minio_api_port }}/minio/health/live"
+        status_code: 200
+      register: live
+      retries: 15
+      delay: 2
+      until: live.status == 200
+
+    - name: Readiness probe
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ minio_api_port }}/minio/health/ready"
+        status_code: 200
+      register: ready
+      retries: 10
+      delay: 2
+      until: ready.status == 200
+
+    - name: Console is listening
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ minio_console_port | int }}"
+        timeout: 20
+
+    - name: Data directory exists
+      ansible.builtin.stat:
+        path: "{{ minio_data_dir }}"
+      register: data_dir
+
+    - name: Assert data directory
+      ansible.builtin.assert:
+        that: data_dir.stat.isdir | default(false)

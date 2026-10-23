@@ -1,0 +1,48 @@
+# Application package manifest. Loaded by the master at startup (and via POST /api/applications/reload).
+name: minio
+description: Standalone MinIO-compatible object storage (single node, single drive). Installs the community fork Silo because upstream MinIO no longer publishes binaries.
+version: 1.1.0
+requiredCapabilities: [linux, ansible, root]
+dependencies: []
+install: install.yml
+verify: verify.yml
+rollback: rollback.yml
+variables:
+  - name: minio_api_port
+    description: S3 API port.
+    type: port
+    default: "9000"
+  - name: minio_console_port
+    description: Web console port.
+    type: port
+    default: "9001"
+  - name: minio_data_dir
+    description: Absolute path used as the storage volume.
+    type: path
+    default: /var/lib/minio/data
+  - name: minio_root_user
+    description: Root access key (3-64 chars, letters, digits, . _ -).
+    type: string
+    required: true
+    default: minio-admin
+    pattern: '^[A-Za-z0-9_.-]{3,64}$'
+  - name: minio_root_password
+    description: Root secret key (8-64 chars; letters, digits and ! @ # % ^ * _ + = . -).
+    type: string
+    required: true
+    secret: true
+    pattern: '^[A-Za-z0-9!@#%^*_+=.-]{8,64}$'
+  - name: minio_run_mode
+    description: "auto = systemd when available, otherwise a background process (containers)."
+    type: enum
+    options: [auto, systemd, process]
+    default: auto
+  - name: minio_download_base
+    description: Base URL hosting the Silo release archive (override for an internal mirror; the archive name and checksum are fixed in install.yml).
+    type: string
+    default: https://github.com/pgsty/silo/releases/download/RELEASE.2026-08-06T00-00-00Z
+    pattern: '^https://[A-Za-z0-9./:_-]+$'
+  - name: minio_purge_data
+    description: On rollback, also delete the data directory.
+    type: bool
+    default: "false"

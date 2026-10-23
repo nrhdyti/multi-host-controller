@@ -1,0 +1,18 @@
+# Copy this folder to playbooks/<your-app>/ and edit. Folders starting with "_" are ignored by the loader.
+name: my-app                    # lowercase letters, digits, dashes
+description: What this application is.
+version: 1.0.0
+requiredCapabilities: [linux, ansible, root]   # tags reported by agents: linux, windows, ansible, root, systemd, container
+dependencies: []                # names of applications that must already be deployed (successfully) on the host
+install: install.yml
+verify: verify.yml              # optional; failure triggers rollback
+rollback: rollback.yml          # optional but strongly recommended
+variables:                      # types: string | int | port | path | bool | enum
+  - name: my_app_port
+    type: port
+    default: "8080"
+  - name: my_app_secret
+    type: string
+    required: true
+    secret: true                # masked in the UI/API and redacted from logs
+    pattern: '^[A-Za-z0-9_.-]{8,64}$'

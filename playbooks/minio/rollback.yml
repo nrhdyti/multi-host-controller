@@ -1,0 +1,55 @@
+---
+# Removes what install.yml created. Data is kept unless minio_purge_data=true.
+# Every task tolerates a partially completed install.
+- name: Roll back MinIO
+  hosts: all
+  gather_facts: false
+  vars:
+    minio_bin: /usr/local/bin/silo
+    minio_user: minio-user
+  tasks:
+    - name: Detect systemd
+      ansible.builtin.stat:
+        path: /run/systemd/system
+      register: systemd_probe
+
+    - name: Stop and disable service (systemd)
+      ansible.builtin.systemd:
+        name: minio
+        state: stopped
+        enabled: false
+      failed_when: false
+      when: systemd_probe.stat.exists
+
+    - name: Stop background process
+      ansible.builtin.command: pkill -x silo
+      changed_when: false
+      failed_when: false
+
+    - name: Remove unit, environment file and binary
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/minio.service
+        - /etc/default/minio
+        - "{{ minio_bin }}"
+        - /usr/local/bin/minio
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+      failed_when: false
+      when: systemd_probe.stat.exists
+
+    - name: Purge data directory
+      ansible.builtin.file:
+        path: "{{ minio_data_dir }}"
+        state: absent
+      when: minio_purge_data | default('false') | bool
+
+    - name: Remove service user
+      ansible.builtin.user:
+        name: "{{ minio_user }}"
+        state: absent
+      failed_when: false
